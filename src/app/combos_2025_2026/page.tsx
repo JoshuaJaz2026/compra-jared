@@ -4,13 +4,14 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { 
   Calculator, Sparkles, Search, FilterX, Plus, Save, Trash2, 
   AlertTriangle, CheckCircle2, XCircle, Loader2, Pencil, RotateCcw, 
-  ChevronLeft, ChevronRight, FileSpreadsheet, ClipboardPaste, ListChecks, Filter, ChevronDown, SearchX, Copy, CheckSquare, Send
+  ChevronLeft, ChevronRight, FileSpreadsheet, ClipboardPaste, ListChecks, Filter, ChevronDown, SearchX, Copy, CheckSquare, Send, Upload
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import * as XLSX from "xlsx"; 
 
 import { obtenerDataKO } from "@/app/data-ko/actions"; 
-import { obtenerCombos, sincronizarCombos } from "./actions";
+import { obtenerCombos, sincronizarCombos, actualizarCombosParcial } from "./actions";
 
 let cacheGlobalCombos: any[] | null = null;
 let cacheGlobalDataKO: any[] | null = null;
@@ -91,6 +92,7 @@ export default function CombosPage() {
   const [itemsPorPagina, setItemsPorPagina] = useState(15);
   
   const [modalImportar, setModalImportar] = useState(false);
+  const [tipoImportacion, setTipoImportacion] = useState<'excel' | 'whatsapp'>('whatsapp');
   const [textoImportacion, setTextoImportacion] = useState("");
   const [pasoImportacion, setPasoImportacion] = useState(1);
   const [analisisImportacion, setAnalisisImportacion] = useState<{ actualizar: any[], nuevos: any[] }>({ actualizar: [], nuevos: [] });
@@ -113,50 +115,6 @@ export default function CombosPage() {
   useEffect(() => { datosRef.current = datos; }, [datos]);
 
   useEffect(() => {
-    const handleAIFilter = (e: Event) => {
-      const combos = (e as CustomEvent).detail;
-      if (combos?.length > 0) setFiltroListaImportada(combos);
-    };
-
-    const handleAISelect = (e: Event) => {
-      const combosNombres = (e as CustomEvent).detail;
-      if (combosNombres?.length > 0) {
-        const idsToSelect = datosRef.current
-          .filter(d => combosNombres.includes(d.combo))
-          .map(d => d.id);
-        if (idsToSelect.length > 0) {
-          setSeleccionados(new Set(idsToSelect));
-          setFiltroListaImportada(combosNombres);
-        }
-      }
-    };
-
-    const handleAIUpdate = (e: Event) => {
-      const actualizaciones = (e as CustomEvent).detail;
-      if (actualizaciones?.length > 0) {
-        setDatos(prev => {
-          const nuevaData = [...prev];
-          actualizaciones.forEach((upd: any) => {
-            const idx = nuevaData.findIndex(d => d.combo === upd.combo);
-            if (idx !== -1) nuevaData[idx] = { ...nuevaData[idx], precioDolares: upd.precio };
-          });
-          return nuevaData;
-        });
-      }
-    };
-
-    window.addEventListener('ai-filter-table', handleAIFilter);
-    window.addEventListener('ai-select-table', handleAISelect);
-    window.addEventListener('ai-update-table', handleAIUpdate);
-    
-    return () => {
-      window.removeEventListener('ai-filter-table', handleAIFilter);
-      window.removeEventListener('ai-select-table', handleAISelect);
-      window.removeEventListener('ai-update-table', handleAIUpdate);
-    };
-  }, []);
-
-  useEffect(() => {
     const arrancarMotores = async () => {
       const tcGuardado = localStorage.getItem('tc_combos_jared');
       if (tcGuardado) setTipoCambio(parseFloat(tcGuardado));
@@ -176,7 +134,7 @@ export default function CombosPage() {
       
       setProgresoCarga(75);
       const combosDB = await obtenerCombos();
-      const datosFinales = combosDB.length > 0 ? combosDB : [{ id: "1", combo: "COMBO 25216", codigoAB: "BLSTBPST 053 + BVSTBMH24 053", precioDolares: 137.50 }];
+      const datosFinales = combosDB; 
       cacheGlobalCombos = datosFinales;
       setDatos(datosFinales);
       
@@ -201,19 +159,37 @@ export default function CombosPage() {
 
   const vaciarTabla = () => {
     setAlerta({
-      visible: true, tipo: 'confirmacion', titulo: '¿Vaciar Toda la Matriz?',
-      mensaje: 'Estás a punto de borrar todos los combos de la pantalla.',
-      textoConfirmar: 'Sí, Vaciar Matriz',
-      accionConfirma: () => { setDatos([]); setPaginaActual(1); setSeleccionados(new Set()); setAlerta(prev => ({ ...prev, visible: false })); }
+      visible: true, 
+      tipo: 'confirmacion', 
+      titulo: '¿Vaciar Toda la Matriz?',
+      mensaje: 'Estás a punto de borrar todos los combos de la pantalla y de la base de datos en la nube. Esta acción no se puede deshacer.',
+      textoConfirmar: 'Sí, Eliminar Todo',
+      accionConfirma: async () => { 
+        setAlerta(prev => ({ ...prev, visible: false }));
+        setGuardando(true);
+        
+        const resultado = await actualizarCombosParcial([]);
+        
+        setGuardando(false);
+        if (resultado.success) {
+          setDatos([]); 
+          cacheGlobalCombos = []; 
+          setPaginaActual(1); 
+          setSeleccionados(new Set()); 
+          setAlerta({ visible: true, tipo: 'exito', titulo: 'Base de Datos Vaciada', mensaje: 'Se han eliminado todos los combos correctamente.' });
+        } else {
+          setAlerta({ visible: true, tipo: 'error', titulo: 'Error', mensaje: 'Ocurrió un problema al intentar vaciar la base de datos.' });
+        }
+      }
     });
   };
 
   const ejecutarGuardado = async () => {
     setAlerta(prev => ({ ...prev, visible: false })); 
     setGuardando(true);
-    const resultado = await sincronizarCombos(datos);
+    const resultado = await actualizarCombosParcial(datos);
     setGuardando(false);
-    if (resultado.success) setAlerta({ visible: true, tipo: 'exito', titulo: 'Matriz Guardada', mensaje: `Se sincronizaron ${datos.length} combos en Neon.` });
+    if (resultado.success) setAlerta({ visible: true, tipo: 'exito', titulo: 'Matriz Actualizada', mensaje: `Se guardaron los cambios exitosamente en la base de datos.` });
     else setAlerta({ visible: true, tipo: 'error', titulo: 'Error', mensaje: resultado.error || 'Ocurrió un problema.' });
   };
 
@@ -233,40 +209,117 @@ export default function CombosPage() {
     } else { ejecutarGuardado(); }
   };
 
+  const procesarArchivoExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        const listaNuevos: any[] = [];
+        
+        json.forEach((row: any, index: number) => {
+          if (Array.isArray(row)) {
+            const validCols = row.filter((c: any) => c !== undefined && c !== null && String(c).trim() !== '');
+            if (validCols.length >= 3) {
+              const combo = String(row[0] || '').trim().toUpperCase();
+              const codigoAB = String(row[1] || '').trim().toUpperCase();
+              
+              if (combo.startsWith('COMBO') && combo !== 'COMBO') {
+                const precioRaw = String(validCols[validCols.length - 1]).replace('$', '').replace(',', '.').trim();
+                const precio = parseFloat(precioRaw) || 0;
+                
+                listaNuevos.push({ 
+                  id: `excel_${Date.now()}_${index}`, 
+                  combo, 
+                  codigoAB, 
+                  precioDolares: precio, 
+                  valorAManual: null, 
+                  valorBManual: null 
+                });
+              }
+            }
+          }
+        });
+
+        if (listaNuevos.length > 0) {
+          ejecutarImportacion([], listaNuevos);
+        } else {
+          setAlerta({ visible: true, tipo: 'error', titulo: 'Formato Incorrecto', mensaje: 'No se encontraron combos válidos. Asegúrate de que tu Excel tenga los datos correctos.' });
+        }
+      } catch (error) {
+        setAlerta({ visible: true, tipo: 'error', titulo: 'Error de Lectura', mensaje: 'El archivo Excel está dañado o no tiene un formato válido.' });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (e.target) e.target.value = ''; 
+  };
+
   const procesarTextoImportacion = () => {
     if (!textoImportacion.trim()) return;
     const lineas = textoImportacion.split('\n').filter(l => l.trim() !== '');
     const listaActualizar: any[] = []; const listaNuevos: any[] = [];
+    
     lineas.forEach((linea, index) => {
       const columnas = linea.split('\t');
       if (columnas.length >= 3) {
         const combo = columnas[0].trim().toUpperCase();
         const codigoAB = columnas[1].trim().toUpperCase();
-        const precioRaw = columnas[columnas.length - 1].replace('$', '').replace(/,/g, '').trim();
+        
+        const precioRaw = columnas[columnas.length - 1].replace('$', '').replace(',', '.').trim();
         const precio = parseFloat(precioRaw) || 0;
+        
         const comboExistente = datos.find(d => d.combo === combo);
         if (comboExistente) listaActualizar.push({ ...comboExistente, codigoAB, precioDolares: precio });
         else listaNuevos.push({ id: `import_${Date.now()}_${index}`, combo, codigoAB, precioDolares: precio, valorAManual: null, valorBManual: null });
       }
     });
     setAnalisisImportacion({ actualizar: listaActualizar, nuevos: listaNuevos });
+    
     if (listaNuevos.length > 0) setPasoImportacion(2);
     else ejecutarImportacion(listaActualizar, listaNuevos);
   };
 
   const ejecutarImportacion = (listaActualizar: any[], listaNuevos: any[]) => {
-    const mapaActualizaciones = new Map(listaActualizar.map(item => [item.combo, item]));
-    const datosModificados = datos.map(row => mapaActualizaciones.has(row.combo) ? mapaActualizaciones.get(row.combo) : row);
-    const datosFinales = [...listaNuevos, ...datosModificados];
-    setDatos(datosFinales); setFiltroListaImportada([...listaActualizar, ...listaNuevos].map(item => item.combo));
-    setModalImportar(false); setTextoImportacion(""); setPasoImportacion(1); setPaginaActual(1);
-    setAlerta({ visible: true, tipo: 'exito', titulo: 'Proforma Importada', mensaje: `Se actualizaron precios de ${listaActualizar.length} combos y se crearon ${listaNuevos.length} nuevos. La tabla ha sido filtrada.` });
+    if (tipoImportacion === 'excel') {
+      const datosFinales = [...listaNuevos];
+      setDatos(datosFinales);
+      setModalImportar(false); setTextoImportacion(""); setPasoImportacion(1); setPaginaActual(1);
+      
+      setAlerta({ 
+        visible: true, 
+        tipo: 'confirmacion', 
+        titulo: '⚠️ Sobrescribir Base de Datos', 
+        mensaje: `Has cargado ${datosFinales.length} combos desde Excel. Esto ELIMINARÁ la matriz anterior de la nube y guardará esta nueva. ¿Proceder?`, 
+        textoConfirmar: 'Sí, Reemplazar Todo', 
+        accionConfirma: async () => {
+          setGuardando(true);
+          const res = await sincronizarCombos(datosFinales);
+          setGuardando(false);
+          setAlerta({ visible: true, tipo: res.success ? 'exito' : 'error', titulo: res.success ? 'Completado' : 'Error', mensaje: res.success ? 'Base de datos sobrescrita masivamente.' : 'Ocurrió un error.' });
+        }
+      });
+    } else {
+      const mapaActualizaciones = new Map(listaActualizar.map(item => [item.combo, item]));
+      const datosModificados = datos.map(row => mapaActualizaciones.has(row.combo) ? mapaActualizaciones.get(row.combo) : row);
+      const datosFinales = [...listaNuevos, ...datosModificados];
+      
+      setDatos(datosFinales); 
+      setFiltroListaImportada([...listaActualizar, ...listaNuevos].map(item => item.combo));
+      setModalImportar(false); setTextoImportacion(""); setPasoImportacion(1); setPaginaActual(1);
+      setAlerta({ visible: true, tipo: 'exito', titulo: 'Proforma Importada', mensaje: `Se actualizaron precios de ${listaActualizar.length} combos y se crearon ${listaNuevos.length} nuevos. Presiona Guardar para subirlos a la nube.` });
+    }
   };
 
   const tcNumerico = typeof tipoCambio === 'number' ? tipoCambio : 0;
   
   const dataPreCalculada = useMemo(() => {
-    return datos.map((row, idx) => {
+    return datos.map((row) => {
       const codigoAB = row.codigoAB || "";
       const codigos = codigoAB.includes('+') ? codigoAB.split('+') : [codigoAB];
       const codA = codigos[0]?.trim().toUpperCase() || "";
@@ -296,7 +349,7 @@ export default function CombosPage() {
       else if (diferencia >= 1) estadoRentabilidad = "REGULAR";
       else estadoRentabilidad = "NO CONVIENE";
 
-      return { idx, row, codA, codB, precioSoles, valorA_final, valorB_final, totalUnitario, diferencia, errorA, errorB, errorTotal, estadoRentabilidad };
+      return { row, codA, codB, precioSoles, valorA_final, valorB_final, totalUnitario, diferencia, errorA, errorB, errorTotal, estadoRentabilidad };
     });
   }, [datos, dataKO, tcNumerico]);
 
@@ -305,7 +358,7 @@ export default function CombosPage() {
   }, [dataPreCalculada]);
 
   const dataFiltrada = useMemo(() => {
-    let filtrada = dataPreCalculada;
+    let filtrada = [...dataPreCalculada];
     if (filtroListaImportada.length > 0) filtrada = filtrada.filter(d => filtroListaImportada.includes(d.row.combo));
     if (filtroRentabilidad !== "TODOS") filtrada = filtrada.filter(d => d.estadoRentabilidad === filtroRentabilidad);
     if (filtroModelo !== "TODOS") filtrada = filtrada.filter(d => d.codA === filtroModelo);
@@ -313,7 +366,8 @@ export default function CombosPage() {
       const termino = busquedaActiva.toLowerCase();
       filtrada = filtrada.filter(d => (d.row.combo || "").toLowerCase().includes(termino) || (d.row.codigoAB || "").toLowerCase().includes(termino));
     }
-    return filtrada;
+    
+    return filtrada.sort((a, b) => (a.row.combo || "").localeCompare(b.row.combo || "", undefined, { numeric: true, sensitivity: 'base' }));
   }, [dataPreCalculada, busquedaActiva, filtroRentabilidad, filtroModelo, filtroListaImportada]);
 
   useEffect(() => { setPaginaActual(1); }, [busquedaActiva, filtroRentabilidad, filtroModelo, itemsPorPagina, filtroListaImportada]);
@@ -427,8 +481,12 @@ export default function CombosPage() {
               <Plus className="w-4 h-4" /> Agregar Fila
             </button>
             
-            <button onClick={() => setModalImportar(true)} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-xl font-bold text-sm transition-all shadow-sm whitespace-nowrap">
-              <ClipboardPaste className="w-4 h-4" /> Importar
+            <button onClick={() => { setTipoImportacion('excel'); setModalImportar(true); }} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-xl font-bold text-sm transition-all shadow-sm whitespace-nowrap">
+              <FileSpreadsheet className="w-4 h-4" /> Excel (Masivo)
+            </button>
+
+            <button onClick={() => { setTipoImportacion('whatsapp'); setModalImportar(true); }} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-xl font-bold text-sm transition-all shadow-sm whitespace-nowrap">
+              <ClipboardPaste className="w-4 h-4" /> WhatsApp (Parcial)
             </button>
 
             {seleccionados.size > 0 && (
@@ -438,7 +496,7 @@ export default function CombosPage() {
             )}
 
             <button onClick={intentarGuardar} disabled={guardando || cargando} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl font-bold text-sm transition-all shadow-sm disabled:opacity-60 whitespace-nowrap">
-              {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
+              {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar Cambios
             </button>
           </div>
 
@@ -449,7 +507,23 @@ export default function CombosPage() {
               <label className="text-xs font-black text-slate-500">T.C.</label>
               <div className="flex items-center">
                 <span className="text-emerald-600 font-bold mr-1">S/</span>
-                <input type="number" step="0.01" value={tipoCambio} onChange={(e) => { setTipoCambio(parseFloat(e.target.value) || 0); }} onBlur={() => { if (!tipoCambio) setTipoCambio(3.49); }} className="w-14 bg-transparent text-slate-800 font-black focus:outline-none p-0 m-0 text-sm" />
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={tipoCambio} 
+                  onChange={(e) => { 
+                    const nuevoTC = parseFloat(e.target.value) || 0;
+                    setTipoCambio(nuevoTC);
+                    localStorage.setItem('tc_combos_jared', nuevoTC.toString());
+                  }} 
+                  onBlur={() => { 
+                    if (!tipoCambio) {
+                      setTipoCambio(3.49);
+                      localStorage.setItem('tc_combos_jared', '3.49');
+                    }
+                  }} 
+                  className="w-14 bg-transparent text-slate-800 font-black focus:outline-none p-0 m-0 text-sm" 
+                />
               </div>
             </div>
 
@@ -545,7 +619,7 @@ export default function CombosPage() {
                     </td>
                   </tr>
                 ) : (
-                  datosDeEstaPagina.map(({ idx, row, codA, codB, precioSoles, valorA_final, valorB_final, totalUnitario, diferencia, errorA, errorB, estadoRentabilidad }) => {
+                  datosDeEstaPagina.map(({ row, codA, codB, precioSoles, valorA_final, valorB_final, totalUnitario, diferencia, errorA, errorB, estadoRentabilidad }, renderIndex) => {
                     
                     let colorDiferencia = "bg-slate-200 text-slate-500 font-black"; 
                     if (estadoRentabilidad === "REVISAR") colorDiferencia = "bg-slate-200 text-slate-500 font-black"; 
@@ -566,7 +640,8 @@ export default function CombosPage() {
                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
                           />
                         </td>
-                        <td className={`p-1 border-r text-center font-black ${estaSeleccionado ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : "bg-slate-50 text-slate-400 border-slate-100"}`}>{indiceInicio + idx + 1}</td>
+                        {/* 🔥 CORRECCIÓN: La numeración se calcula basándose estrictamente en la fila visible */}
+                        <td className={`p-1 border-r text-center font-black ${estaSeleccionado ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : "bg-slate-50 text-slate-400 border-slate-100"}`}>{indiceInicio + renderIndex + 1}</td>
                         <td className={`p-0 border-r ${estaSeleccionado ? "bg-transparent border-indigo-300" : "bg-white border-slate-100"}`}><input type="text" value={row.combo} onChange={(e) => actualizarCelda(row.id, 'combo', e.target.value.toUpperCase())} className="w-full h-10 px-3 bg-transparent font-bold text-slate-700 outline-none focus:bg-white" /></td>
                         <td className={`p-0 border-r ${estaSeleccionado ? "bg-transparent border-indigo-300" : "bg-white border-slate-100"}`}><input type="text" value={row.codigoAB} onChange={(e) => actualizarCelda(row.id, 'codigoAB', e.target.value.toUpperCase())} className="w-full h-10 px-3 text-center font-mono font-bold text-slate-800 bg-transparent outline-none focus:bg-white" /></td>
                         <td className={`p-2 border-r text-center font-mono font-bold text-purple-700 ${estaSeleccionado ? "bg-transparent border-indigo-300" : "bg-purple-50/30 border-purple-100"}`}>{codA}</td>
@@ -667,40 +742,58 @@ export default function CombosPage() {
         <DialogContent className="sm:max-w-[900px] w-[95vw] rounded-3xl p-6 shadow-2xl border-slate-100">
           <DialogHeader className="mb-4">
             <DialogTitle className="text-2xl font-black text-slate-800 flex items-center gap-2">
-              <ClipboardPaste className="w-6 h-6 text-amber-500" />
-              Importar de WhatsApp
+              {tipoImportacion === 'excel' ? <FileSpreadsheet className="w-6 h-6 text-orange-500" /> : <ClipboardPaste className="w-6 h-6 text-amber-500" />}
+              {tipoImportacion === 'excel' ? 'Importar Archivo Excel' : 'Importar de WhatsApp (Parcial)'}
             </DialogTitle>
             <DialogDescription className="text-sm font-medium text-slate-500 mt-2">
-              {pasoImportacion === 1 
-                ? "Pega aquí la lista de texto. El sistema extraerá nombres, códigos y actualizará los precios en dólares automáticamente."
-                : "El sistema ha detectado combos que no existen en tu base de datos actual. ¿Deseas agregarlos?"
+              {tipoImportacion === 'excel' 
+                ? "Sube tu archivo .xlsx original. Al cargarlo, el sistema reemplazará por completo la matriz actual en la base de datos."
+                : (pasoImportacion === 1 
+                  ? "Pega aquí la lista de texto recibida por WhatsApp. El sistema extraerá los datos y actualizará los precios sin borrar el resto de tus combos."
+                  : "El sistema ha detectado combos que no existen en tu base actual. ¿Deseas agregarlos a la interfaz?")
               }
             </DialogDescription>
           </DialogHeader>
 
-          {pasoImportacion === 1 ? (
-            <textarea 
-              className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none custom-scrollbar whitespace-pre overflow-x-auto"
-              placeholder="COMBO 20373    BLSTKAG RPB 053+GCSTCC 5000 053    10    1    UND    80"
-              value={textoImportacion}
-              onChange={(e) => setTextoImportacion(e.target.value)}
-            />
-          ) : (
-            <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl text-center">
-              <Sparkles className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
-              <h3 className="text-lg font-black text-indigo-900 mb-1">¡Combos Nuevos Detectados!</h3>
-              <p className="text-sm font-medium text-indigo-700">
-                Se actualizarán los precios de <strong>{analisisImportacion.actualizar.length}</strong> combos existentes y se crearán <strong>{analisisImportacion.nuevos.length}</strong> combos totalmente nuevos.
+          {tipoImportacion === 'excel' ? (
+            <div className="border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-2xl p-10 flex flex-col items-center justify-center transition-colors hover:bg-indigo-50">
+              <FileSpreadsheet className="w-12 h-12 text-indigo-400 mb-4" />
+              <h3 className="text-lg font-black text-indigo-900 mb-2">Sube tu matriz Excel</h3>
+              <p className="text-sm font-medium text-slate-500 mb-6 text-center max-w-sm">
+                Selecciona tu archivo original con extensión .xlsx o .xls. Extraeremos los códigos y precios automáticamente.
               </p>
+              <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black cursor-pointer shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2">
+                <Upload className="w-5 h-5" /> Seleccionar Archivo
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={procesarArchivoExcel} />
+              </label>
             </div>
+          ) : (
+            pasoImportacion === 1 ? (
+              <textarea 
+                className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none custom-scrollbar whitespace-pre overflow-x-auto"
+                placeholder="COMBO 20373    BLSTKAG RPB 053+GCSTCC 5000 053    10    1    UND    80"
+                value={textoImportacion}
+                onChange={(e) => setTextoImportacion(e.target.value)}
+              />
+            ) : (
+              <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl text-center">
+                <Sparkles className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
+                <h3 className="text-lg font-black text-indigo-900 mb-1">¡Combos Nuevos Detectados!</h3>
+                <p className="text-sm font-medium text-indigo-700">
+                  Se actualizarán los precios de <strong>{analisisImportacion.actualizar.length}</strong> combos existentes y se prepararán <strong>{analisisImportacion.nuevos.length}</strong> combos totalmente nuevos.
+                </p>
+              </div>
+            )
           )}
 
           <DialogFooter className="mt-6">
             <Button variant="outline" onClick={() => { setModalImportar(false); setPasoImportacion(1); setTextoImportacion(""); }} className="rounded-xl h-12 font-bold text-slate-600 w-full sm:w-auto">Cancelar</Button>
-            {pasoImportacion === 1 ? (
+            
+            {tipoImportacion === 'whatsapp' && pasoImportacion === 1 && (
               <Button onClick={procesarTextoImportacion} disabled={!textoImportacion.trim()} className="rounded-xl h-12 font-black text-white bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto shadow-md">Analizar Texto</Button>
-            ) : (
-              <Button onClick={() => ejecutarImportacion(analisisImportacion.actualizar, analisisImportacion.nuevos)} className="rounded-xl h-12 font-black text-white bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto shadow-md shadow-emerald-500/30">Sí, Importar y Crear</Button>
+            )}
+            {tipoImportacion === 'whatsapp' && pasoImportacion === 2 && (
+              <Button onClick={() => ejecutarImportacion(analisisImportacion.actualizar, analisisImportacion.nuevos)} className="rounded-xl h-12 font-black text-white bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto shadow-md shadow-emerald-500/30">Sí, Importar</Button>
             )}
           </DialogFooter>
         </DialogContent>

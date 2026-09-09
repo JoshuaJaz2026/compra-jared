@@ -56,6 +56,10 @@ model ComboMatriz {
   codigoAB       String
   precioDolares  Float
   
+  // Nuevos campos para edición manual
+  valorAManual   Float?   
+  valorBManual   Float?   
+  
   creadoEn       DateTime @default(now())
   actualizadoEn  DateTime @updatedAt
 }
