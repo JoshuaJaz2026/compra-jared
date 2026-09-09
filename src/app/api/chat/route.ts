@@ -21,8 +21,9 @@ export async function POST(req: Request) {
       const matchA = dataKO.find((d: any) => (d.codigoInche || "").replace(/\s+/g, '').toUpperCase() === codA);
       const matchB = dataKO.find((d: any) => (d.codigoInche || "").replace(/\s+/g, '').toUpperCase() === codB);
 
-      const valorA = row.valorAManual != null ? row.valorAManual : (matchA ? parseFloat(matchA.valorComercial) || 0 : 0);
-      const valorB = row.valorBManual != null ? row.valorBManual : (matchB ? parseFloat(matchB.valorComercial) || 0 : 0);
+      // 🔥 CORRECCIÓN TS: Convertimos a String antes de parsear para evitar el error de tipado en el Build
+      const valorA = row.valorAManual != null ? row.valorAManual : (matchA ? parseFloat(String(matchA.valorComercial)) || 0 : 0);
+      const valorB = row.valorBManual != null ? row.valorBManual : (matchB ? parseFloat(String(matchB.valorComercial)) || 0 : 0);
 
       const precioSoles = (row.precioDolares || 0) * tc;
       const totalUnitario = valorA + valorB;
