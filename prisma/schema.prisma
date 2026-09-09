@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ProductoUnitario {
+  id           String         @id @default(cuid())
+  codigo       String         @unique
+  nombre       String
+  costo        Float
+  createdAt    DateTime       @default(now())
+  
+  // Relación con los combos
+  combos       ComboDetalle[]
+}
+
+model Combo {
+  id           String         @id @default(cuid())
+  codigoCombo  String         @unique
+  nombre       String
+  precioOferta Float          
+  createdAt    DateTime       @default(now())
+  
+  // Relación
+  detalles     ComboDetalle[]
+}
+
+model ComboDetalle {
+  id                 String           @id @default(cuid())
+  comboId            String
+  productoUnitarioId String
+  cantidad           Int              @default(1)
+  
+  // Relaciones
+  combo              Combo            @relation(fields: [comboId], references: [id])
+  producto           ProductoUnitario @relation(fields: [productoUnitarioId], references: [id])
+}
+
+model DataKO {
+  id             String   @id @default(cuid())
+  codigoInche    String   @unique
+  costoPDF       Float
+  costoSoles     Float
+  valorComercial Float
+  
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+}
+
+model ComboMatriz {
+  id             String   @id @default(cuid())
+  combo          String   @unique
+  codigoAB       String
+  precioDolares  Float
+  
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+}
+
+model MatrizCombo {
+  id            String   @id @default(cuid())
+  combo         String   @unique
+  codigoAB      String
+  precioDolares Float
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+model Usuario {
+  id            String   @id @default(cuid())
+  nombres       String
+  apellidos     String
+  celular       String
+  correo        String   @unique
+  contrasena    String   
+  
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
