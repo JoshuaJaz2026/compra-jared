@@ -362,9 +362,16 @@ export default function CombosPage() {
     if (filtroListaImportada.length > 0) filtrada = filtrada.filter(d => filtroListaImportada.includes(d.row.combo));
     if (filtroRentabilidad !== "TODOS") filtrada = filtrada.filter(d => d.estadoRentabilidad === filtroRentabilidad);
     if (filtroModelo !== "TODOS") filtrada = filtrada.filter(d => d.codA === filtroModelo);
+    
     if (busquedaActiva) {
-      const termino = busquedaActiva.toLowerCase();
-      filtrada = filtrada.filter(d => (d.row.combo || "").toLowerCase().includes(termino) || (d.row.codigoAB || "").toLowerCase().includes(termino));
+      const terminos = busquedaActiva.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+      
+      filtrada = filtrada.filter(d => 
+        terminos.some(termino => 
+          (d.row.combo || "").toLowerCase().includes(termino) || 
+          (d.row.codigoAB || "").toLowerCase().includes(termino)
+        )
+      );
     }
     
     return filtrada.sort((a, b) => (a.row.combo || "").localeCompare(b.row.combo || "", undefined, { numeric: true, sensitivity: 'base' }));
@@ -474,9 +481,11 @@ export default function CombosPage() {
           </div>
         </div>
 
-        <div className="max-w-[1800px] mx-auto w-full mb-4 flex flex-col lg:flex-row lg:items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-slate-200/60 flex-shrink-0">
+        {/* 🔥 CONTENEDOR PRINCIPAL ACTUALIZADO CON FLEX-WRAP PARA EVITAR DESBORDES */}
+        <div className="max-w-[1800px] mx-auto w-full mb-4 flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl shadow-sm border border-slate-200/60 flex-shrink-0">
           
-          <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap flex-shrink-0">
+          {/* BOTONES IZQUIERDOS */}
+          <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
             <button onClick={agregarFila} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl font-bold text-sm transition-all shadow-sm whitespace-nowrap">
               <Plus className="w-4 h-4" /> Agregar Fila
             </button>
@@ -500,9 +509,10 @@ export default function CombosPage() {
             </button>
           </div>
 
-          <div className="hidden lg:block w-px h-8 bg-slate-200 mx-1 flex-shrink-0"></div>
+          <div className="hidden xl:block w-px h-8 bg-slate-200 mx-1 flex-shrink-0"></div>
 
-          <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap flex-1 min-w-0">
+          {/* FILTROS Y BÚSQUEDA CENTRAL */}
+          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl flex-shrink-0">
               <label className="text-xs font-black text-slate-500">T.C.</label>
               <div className="flex items-center">
@@ -543,14 +553,21 @@ export default function CombosPage() {
               tituloBase="Modelos (Todos)" 
             />
 
-            <div className="relative group flex-1 min-w-[150px]">
+            <div className="relative group flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder="Buscar combo o texto..." value={inputBusqueda} onChange={(e) => setInputBusqueda(e.target.value)} className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" />
+              <input 
+                type="text" 
+                placeholder="Buscar (ej: COMBO 1, COMBO 2)..." 
+                value={inputBusqueda} 
+                onChange={(e) => setInputBusqueda(e.target.value)} 
+                className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" 
+              />
               {inputBusqueda && <button onClick={() => setInputBusqueda('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><FilterX className="w-4 h-4" /></button>}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* BOTONES DERECHOS (Filtro Activo y Vaciar) */}
+          <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
             {filtroListaImportada.length > 0 && (
               <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-xl text-sm border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 whitespace-nowrap">
                 <Sparkles className="w-4 h-4 text-indigo-500" />
@@ -640,7 +657,6 @@ export default function CombosPage() {
                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
                           />
                         </td>
-                        {/* 🔥 CORRECCIÓN: La numeración se calcula basándose estrictamente en la fila visible */}
                         <td className={`p-1 border-r text-center font-black ${estaSeleccionado ? "bg-indigo-600 text-white border-indigo-600 shadow-inner" : "bg-slate-50 text-slate-400 border-slate-100"}`}>{indiceInicio + renderIndex + 1}</td>
                         <td className={`p-0 border-r ${estaSeleccionado ? "bg-transparent border-indigo-300" : "bg-white border-slate-100"}`}><input type="text" value={row.combo} onChange={(e) => actualizarCelda(row.id, 'combo', e.target.value.toUpperCase())} className="w-full h-10 px-3 bg-transparent font-bold text-slate-700 outline-none focus:bg-white" /></td>
                         <td className={`p-0 border-r ${estaSeleccionado ? "bg-transparent border-indigo-300" : "bg-white border-slate-100"}`}><input type="text" value={row.codigoAB} onChange={(e) => actualizarCelda(row.id, 'codigoAB', e.target.value.toUpperCase())} className="w-full h-10 px-3 text-center font-mono font-bold text-slate-800 bg-transparent outline-none focus:bg-white" /></td>
