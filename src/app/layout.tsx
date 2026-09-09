@@ -27,6 +27,7 @@ export default function RootLayout({
           {children}
         </main>
         
+        {/* IA de MiniJared inyectada de forma global */}
         <GeminiBot />
       </body>
     </html>

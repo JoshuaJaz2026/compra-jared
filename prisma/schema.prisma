@@ -84,3 +84,22 @@ model Usuario {
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 }
+
+model Propuesta {
+  id             String   @id @default(cuid())
+  fechaCompra    String   // Guardaremos la fecha como "YYYY-MM-DD"
+  perfilado      String   @default("")
+  cantidad       Int      @default(1)
+  
+  combo          String
+  codigoAB       String
+  codigoA        String
+  codigoB        String
+  
+  precioDolares  Float    @default(0)
+  valorA         Float    @default(0)
+  valorB         Float    @default(0)
+
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+}
